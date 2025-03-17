@@ -186,3 +186,44 @@ body {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
 }
+
+/* Adjust the controls section to align multiple buttons */
+#controls {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+/* Style for URL input */
+#urlInput {
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.closeUrlModalSpan {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.closeUrlModalSpan:hover {
+    color: black;
+}
+
+/* System entry styling */
+.SystemEntry {
+    background-color: #f0f8ff;
+    padding: 8px;
+    margin: 5px 0;
+    border-radius: 5px;
+    border-left: 3px solid #4682b4;
+}
+
+#urlLoader {
+    visibility: hidden;
+}
