@@ -12,7 +12,7 @@ import java.util.List;
 public interface DocumentEmbeddingRepository extends JpaRepository<DocumentEmbedding, Long> {
 
     // Find nearest neighbors using cosine distance
-    @Query(value = "SELECT * FROM document_embeddings ORDER BY embedding <=> CAST(:queryEmbedding AS vector) LIMIT :k", nativeQuery = true)
+    @Query(value = "SELECT * FROM document_embeddings_ollama ORDER BY embedding <=> CAST(:queryEmbedding AS vector) LIMIT :k", nativeQuery = true)
     List<DocumentEmbedding> findNearestNeighbors(@Param("queryEmbedding") float[] queryEmbedding, @Param("k") int k);
 
     // Find by filename

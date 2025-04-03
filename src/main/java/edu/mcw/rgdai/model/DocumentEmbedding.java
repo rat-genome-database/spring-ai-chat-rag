@@ -8,7 +8,8 @@ import org.hibernate.annotations.Type;
 import edu.mcw.rgdai.config.types.PGvectorType;
 
 @Entity
-@Table(name = "document_embeddings")
+//@Table(name = "document_embeddings")
+@Table(name = "document_embeddings_ollama")
 public class DocumentEmbedding {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -17,7 +18,8 @@ public class DocumentEmbedding {
 //    @Column(name = "embedding", columnDefinition = "vector(1536)")
 //    private PGvector embedding;
     @Type(PGvectorType.class)
-    @Column(name = "embedding", columnDefinition = "vector(1536)")
+//    @Column(name = "embedding", columnDefinition = "vector(1536)")
+    @Column(name = "embedding", columnDefinition = "vector(1024)")
     private PGvector embedding;
 
     @Column(columnDefinition = "text")
