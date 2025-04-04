@@ -82,7 +82,7 @@ public class ChatController {
 
         // 1. Retrieve relevant documents
         List<Document> documents = vectorStore.similaritySearch(
-                SearchRequest.query(question.getQuestion()).withTopK((int) 0.5)
+                SearchRequest.query(question.getQuestion()).withTopK(3)
         );
 
         // 2. Format the context
@@ -95,17 +95,32 @@ public class ChatController {
         // 3. Create prompt with context
         String prompt = String.format("""
             Answer the following question based on this context:
-            
+
             Context:
             %s
-            
+
             Question: %s
-            
+
             Answer:
             """, context, question.getQuestion());
+        String prompt1=String.format("""
+      You are an AI assistant that ONLY answers questions based on the provided context information.
+    
+    IMPORTANT INSTRUCTIONS:
+    - If the answer is not contained in the context, respond with ONLY: "I don't have information about that in my knowledge base."
+    - Do not use any knowledge outside of the provided context
+    - Do not make up or infer information not explicitly stated in the context
+    
+    Context:
+    %s
+    
+    Question: %s
+    
+    Answer (based ONLY on the context above):
+    """, context, question.getQuestion());
 
         // 4. Get response from Ollama
-        String response = ollamaService.generateResponse(prompt);
+        String response = ollamaService.generateResponse(prompt1);
 
         return new Answer(response);
     }

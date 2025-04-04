@@ -42,11 +42,12 @@ public class PostgresVectorStore implements VectorStore {
 
     @Override
     public List<Document> similaritySearch(SearchRequest request) {
+        System.out.println("Starting similarity search for query: {}"+request.getQuery());
         EmbeddingResponse response = embeddingModel.embedForResponse(List.of(request.getQuery()));
         float[] queryEmbedding = response.getResults().get(0).getOutput();
-
+        System.out.println("Generated embedding vector of size: {}"+queryEmbedding.length);
         List<DocumentEmbedding> nearest = repository.findNearestNeighbors(queryEmbedding, request.getTopK());
-
+        System.out.println("Found {} nearest documents in database"+nearest.size());
         return nearest.stream()
                 .map(de -> new Document(de.getChunk(), Map.of("filename", de.getFileName())))
                 .collect(Collectors.toList());
