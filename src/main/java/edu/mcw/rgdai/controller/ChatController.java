@@ -103,11 +103,12 @@ public class ChatController {
 
             Answer:
             """, context, question.getQuestion());
+
         String prompt1=String.format("""
       You are an AI assistant that ONLY answers questions based on the provided context information.
     
     IMPORTANT INSTRUCTIONS:
-    - If the answer is not contained in the context, respond with ONLY: "I don't have information about that in my knowledge base."
+    - If the answer is not contained in the context except for greeting messages, respond with ONLY: "I don't have information about that in my knowledge base."
     - Do not use any knowledge outside of the provided context
     - Do not make up or infer information not explicitly stated in the context
     
@@ -118,6 +119,36 @@ public class ChatController {
     
     Answer (based ONLY on the context above):
     """, context, question.getQuestion());
+
+        String enhancedPrompt = String.format("""
+        You are an intelligent AI assistant with access to a curated knowledge base. Your role is to provide accurate, helpful, and comprehensive answers based on the provided context.
+
+        ## CORE INSTRUCTIONS:
+        1. **Primary Source**: Always prioritize information from the provided context
+        2. **Accuracy**: Only state facts that are explicitly supported by the context
+        3. **Clarity**: Provide clear, well-structured responses that directly address the user's question
+        4. **Completeness**: Give comprehensive answers when the context supports it
+        5. **Transparency**: Clearly indicate when information is limited or unavailable
+
+        ## RESPONSE GUIDELINES:
+        - **When context is sufficient**: Provide a detailed, helpful answer citing relevant sources
+        - **When context is partial**: Answer what you can and clearly state what information is missing
+        - **When context is insufficient**: Respond with "I don't have enough information in my knowledge base to answer that question accurately."
+        - **Always be conversational**: Write in a natural, helpful tone as if speaking to a colleague
+        - **Structure your responses**: Use bullet points, numbered lists, or paragraphs as appropriate
+        - **Cite sources when helpful**: Mention filenames or document sources when it adds credibility
+
+        ## CONTEXT INFORMATION:
+        %s
+
+        ## USER QUESTION:
+        %s
+
+        ## YOUR RESPONSE:
+        Based on the information in my knowledge base, here's what I can tell you:
+        """,
+                context.isEmpty() ? "No relevant documents found in the knowledge base." : context,
+                question.getQuestion());
 
         // 4. Get response from Ollama
         String response = ollamaService.generateResponse(prompt1);
