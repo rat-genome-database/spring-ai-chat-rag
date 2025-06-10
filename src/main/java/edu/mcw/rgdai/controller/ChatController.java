@@ -82,7 +82,7 @@ public class ChatController {
 
         // 1. Retrieve relevant documents
         List<Document> documents = vectorStore.similaritySearch(
-                SearchRequest.query(question.getQuestion()).withTopK(3)
+                SearchRequest.query(question.getQuestion()).withTopK(10)
         );
 
         // 2. Format the context
@@ -93,22 +93,13 @@ public class ChatController {
         LOG.info("Retrieved context: {} characters", context.length());
 
         // 3. Create prompt with context
-        String prompt = String.format("""
-            Answer the following question based on this context:
 
-            Context:
-            %s
-
-            Question: %s
-
-            Answer:
-            """, context, question.getQuestion());
-
-        String prompt1=String.format("""
+        //using this prompt
+        String prompt=String.format("""
       You are an AI assistant that ONLY answers questions based on the provided context information.
     
     IMPORTANT INSTRUCTIONS:
-    - If the answer is not contained in the context except for greeting messages, respond with ONLY: "I don't have information about that in my knowledge base."
+    - If the answer is not contained in the context except for greeting messages such as hi, how are you doing etc, respond with ONLY: "I don't have information about that in my knowledge base."
     - Do not use any knowledge outside of the provided context
     - Do not make up or infer information not explicitly stated in the context
     
@@ -120,6 +111,7 @@ public class ChatController {
     Answer (based ONLY on the context above):
     """, context, question.getQuestion());
 
+        //not using this right now
         String enhancedPrompt = String.format("""
         You are an intelligent AI assistant with access to a curated knowledge base. Your role is to provide accurate, helpful, and comprehensive answers based on the provided context.
 
@@ -151,7 +143,7 @@ public class ChatController {
                 question.getQuestion());
 
         // 4. Get response from Ollama
-        String response = ollamaService.generateResponse(prompt1);
+        String response = ollamaService.generateResponse(prompt);
 
         return new Answer(response);
     }

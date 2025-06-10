@@ -71,7 +71,8 @@
     <%
         // Obtain the authentication object and username from the Spring Security context.
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        String username = (auth != null) ? auth.getName() : "";
+//        String username = (auth != null) ? auth.getName() : "";
+        String username = "User";
         String contextPath = request.getContextPath();
     %>
     <link rel="stylesheet" href="<%= contextPath %>/resources/css/style.css"/>
@@ -121,19 +122,19 @@
             <h2>AI Chat Demo</h2>
             <div class="user-info">
                 Welcome, <%= username %>!
-                <form action="<%= contextPath %>/logout" method="post" style="display: inline;">
-                    <input type="submit" value="Logout" class="logout-btn"/>
-                </form>
+<%--                <form action="<%= contextPath %>/logout" method="post" style="display: inline;">--%>
+<%--                    <input type="submit" value="Logout" class="logout-btn"/>--%>
+<%--                </form>--%>
             </div>
         </div>
 
         <div id="transcript"></div>
-
+        <%if(request.getServerName().equals("localhost") ){%>
         <div id="controls">
             <button id="uploadFile" class="upload-btn">Upload File</button>
             <button id="processUrl" class="upload-btn">Process URL</button>
         </div>
-
+        <%}%>
         <div class="input-area">
             <textarea id="userInput" placeholder="Type your question here..." rows="3"></textarea>
             <button id="typedTextSubmit" class="submit-btn">Send</button>

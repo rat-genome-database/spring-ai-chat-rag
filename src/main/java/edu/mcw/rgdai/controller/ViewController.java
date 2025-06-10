@@ -11,7 +11,8 @@ public class ViewController {
     @GetMapping(value = {"", "/", "/home"})
     public String home() {
         logger.info("Accessing home page");
-        return "redirect:/login";
+//        return "redirect:/login";
+        return  "redirect:/chat";
     }
 
     @GetMapping("/login")
