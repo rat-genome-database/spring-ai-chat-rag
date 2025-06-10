@@ -35,6 +35,7 @@ public class OllamaService {
         requestBody.put("model", model);
         requestBody.put("prompt", prompt);
         requestBody.put("stream", false); // Important: disable streaming for simpler response handling
+        requestBody.put("options", Map.of("temperature", 0.0));
 
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
