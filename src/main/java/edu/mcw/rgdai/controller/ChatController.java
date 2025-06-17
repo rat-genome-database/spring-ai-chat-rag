@@ -40,7 +40,7 @@ public class ChatController {
         List<Document> documents = vectorStore.similaritySearch(
                 SearchRequest.query(question.getQuestion())
                         .withTopK(8)// Get more documents for better context
-                        .withSimilarityThreshold(0.3)
+                        .withSimilarityThreshold(0.38)
 
         );
 
