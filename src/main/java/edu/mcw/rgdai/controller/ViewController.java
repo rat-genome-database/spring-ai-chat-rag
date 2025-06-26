@@ -27,4 +27,10 @@ public class ViewController {
         return "chat";
     }
 
+    @GetMapping("/chat-openai")
+    public String chatOpenAi() {
+        logger.info("Accessing chat page");
+        return "chat-openai";
+    }
+
 }
