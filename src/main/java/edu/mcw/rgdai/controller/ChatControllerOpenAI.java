@@ -5,7 +5,6 @@ import edu.mcw.rgdai.model.Question;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.vectorstore.SearchRequest;
@@ -14,7 +13,8 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.ai.document.Document;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -22,10 +22,12 @@ import java.util.Map;
 public class ChatControllerOpenAI {
     private static final Logger LOG = LoggerFactory.getLogger(ChatControllerOpenAI.class);
     private final ChatClient chatClient;
+    private final VectorStore openaiVectorStore;
 
     public ChatControllerOpenAI(ApplicationContext context,
                                 @Qualifier("openaiVectorStore") VectorStore openaiVectorStore) {
-        LOG.info("🤖 Initializing OpenAI ChatController with dedicated OpenAI vector store");
+        LOG.info("🤖 Initializing OpenAI ChatController with Spring AI's exact prompt");
+        this.openaiVectorStore = openaiVectorStore;
 
         // Debug: Print all available ChatModel beans
         Map<String, ChatModel> chatModels = context.getBeansOfType(ChatModel.class);
@@ -48,15 +50,12 @@ public class ChatControllerOpenAI {
             throw new RuntimeException("❌ OpenAI ChatModel not found! Available models: " + chatModels.keySet());
         }
 
+        // Build ChatClient without QuestionAnswerAdvisor - manual RAG
         this.chatClient = ChatClient.builder(openAiChatModel)
-                .defaultAdvisors(
-                        new SimpleLoggerAdvisor(),
-                        new QuestionAnswerAdvisor(openaiVectorStore, SearchRequest.defaults()
-                                .withTopK(8)
-                                .withSimilarityThreshold(0.38))
-                )
+                .defaultAdvisors(new SimpleLoggerAdvisor())
                 .build();
-        LOG.info("✅ OpenAI ChatClient initialized successfully with dedicated OpenAI vector store");
+
+        LOG.info("✅ OpenAI ChatClient initialized with Spring AI's exact prompt template");
     }
 
     @PostMapping
@@ -69,16 +68,60 @@ public class ChatControllerOpenAI {
         }
 
         try {
-            Answer answer = chatClient.prompt()
-                    .user(question.getQuestion())
-                    .call()
-                    .entity(Answer.class);
+            // Get documents (same as QuestionAnswerAdvisor)
+            List<Document> documents = openaiVectorStore.similaritySearch(
+                    SearchRequest.query(question.getQuestion())
+                            .withTopK(8)
+                            .withSimilarityThreshold(0.38));
 
-            LOG.info("🔵 OpenAI - Generated answer: {}", answer.getAnswer());
-            return answer;
+            LOG.info("🔵 OpenAI - Retrieved {} documents from vector store", documents.size());
+
+            if (documents.isEmpty()) {
+                return new Answer("I don't have information about that topic in my knowledge base.");
+            }
+
+            // Build context exactly like Spring AI (just concatenate content)
+            StringBuilder contextBuilder = new StringBuilder();
+            for (Document doc : documents) {
+                contextBuilder.append(doc.getContent()).append("\n\n");
+            }
+
+            // Use Spring AI's EXACT prompt template + source tracking
+            String prompt = String.format("""
+                %s
+                
+                Context information is below, surrounded by ---------------------
+                
+                ---------------------
+                %s
+                ---------------------
+                
+                Given the context and provided history information and not prior knowledge,
+                reply to the user comment. If the answer is not in the context, inform
+                the user that you can't answer the question.
+                
+                At the end of your response, add "SOURCES_USED:" followed by the filenames you actually used from these documents: %s
+                """,
+                    question.getQuestion(),
+                    contextBuilder.toString(),
+                    documents.stream()
+                            .map(doc -> doc.getMetadata().getOrDefault("filename", "unknown").toString())
+                            .distinct()
+                            .reduce((a, b) -> a + ", " + b)
+                            .orElse("none"));
+
+            // Single API call
+            String response = chatClient.prompt()
+                    .user(prompt)
+                    .call()
+                    .content();
+
+            LOG.info("🔵 OpenAI - Generated response with Spring AI prompt");
+            return new Answer(response);
+
         } catch (Exception e) {
             LOG.error("❌ OpenAI - Error generating response", e);
-            return new Answer("OpenAI Error: " + e.getMessage() + ". Your Ollama implementation is still working at /chat endpoint.");
+            return new Answer("OpenAI Error: " + e.getMessage());
         }
     }
 

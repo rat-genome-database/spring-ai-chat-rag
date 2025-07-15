@@ -89,7 +89,7 @@
         <div id="header">
             <h2>AI Chat Demo <span class="openai-badge">OpenAI</span></h2>
             <div class="model-switch">
-                <a href="<%= contextPath %>/">Switch to Ollama</a>
+                <a href="<%= contextPath %>/" target="_blank">Switch to Ollama</a>
             </div>
             <div class="user-info">
                 Welcome, <%= username %>!
