@@ -2,10 +2,13 @@ package edu.mcw.rgdai.controller;
 
 import edu.mcw.rgdai.model.Answer;
 import edu.mcw.rgdai.model.Question;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
+import org.springframework.ai.chat.memory.InMemoryChatMemory;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -24,19 +27,15 @@ public class ChatControllerOpenAI {
     private final ChatClient chatClient;
     private final VectorStore openaiVectorStore;
 
+    private static final String CHAT_MEMORY_CONVERSATION_ID_KEY = "conversationId";
+
     public ChatControllerOpenAI(ApplicationContext context,
                                 @Qualifier("openaiVectorStore") VectorStore openaiVectorStore) {
-        LOG.info("🤖 Initializing OpenAI ChatController with Spring AI's exact prompt");
+        LOG.info("🤖 Initializing OpenAI ChatController with system messages for doc context");
         this.openaiVectorStore = openaiVectorStore;
 
-        // Debug: Print all available ChatModel beans
-        Map<String, ChatModel> chatModels = context.getBeansOfType(ChatModel.class);
-        LOG.info("Available ChatModel beans:");
-        for (Map.Entry<String, ChatModel> entry : chatModels.entrySet()) {
-            LOG.info("Bean name: '{}', Class: {}", entry.getKey(), entry.getValue().getClass().getSimpleName());
-        }
-
         // Find OpenAI chat model
+        Map<String, ChatModel> chatModels = context.getBeansOfType(ChatModel.class);
         ChatModel openAiChatModel = null;
         for (Map.Entry<String, ChatModel> entry : chatModels.entrySet()) {
             if (entry.getValue().getClass().getSimpleName().toLowerCase().contains("openai")) {
@@ -47,20 +46,24 @@ public class ChatControllerOpenAI {
         }
 
         if (openAiChatModel == null) {
-            throw new RuntimeException("❌ OpenAI ChatModel not found! Available models: " + chatModels.keySet());
+            throw new RuntimeException("❌ OpenAI ChatModel not found!");
         }
 
-        // Build ChatClient without QuestionAnswerAdvisor - manual RAG
+        // Your exact setup - keep MessageChatMemoryAdvisor
         this.chatClient = ChatClient.builder(openAiChatModel)
-                .defaultAdvisors(new SimpleLoggerAdvisor())
+                .defaultAdvisors(
+                        new SimpleLoggerAdvisor(),
+                        new MessageChatMemoryAdvisor(new InMemoryChatMemory())
+                )
                 .build();
 
-        LOG.info("✅ OpenAI ChatClient initialized with Spring AI's exact prompt template");
+        LOG.info("✅ OpenAI ChatClient initialized with system message approach");
     }
 
     @PostMapping
-    public Answer chat(@RequestBody Question question, Authentication user) {
+    public Answer chat(@RequestBody Question question, Authentication user, HttpServletRequest request) {
         LOG.info("🔵 OpenAI - Received question: {}", question.getQuestion());
+        String conversationId = (user != null) ? user.getName() : request.getSession().getId();
 
         // Handle simple greetings
         if (isGreeting(question.getQuestion())) {
@@ -68,7 +71,7 @@ public class ChatControllerOpenAI {
         }
 
         try {
-            // Get documents (same as QuestionAnswerAdvisor)
+            // Get documents (same as before)
             List<Document> documents = openaiVectorStore.similaritySearch(
                     SearchRequest.query(question.getQuestion())
                             .withTopK(8)
@@ -80,29 +83,32 @@ public class ChatControllerOpenAI {
                 return new Answer("I don't have information about that topic in my knowledge base.");
             }
 
-            // Build context exactly like Spring AI (just concatenate content)
+            // Build context (same as before)
             StringBuilder contextBuilder = new StringBuilder();
             for (Document doc : documents) {
                 contextBuilder.append(doc.getContent()).append("\n\n");
             }
 
-            // Use Spring AI's EXACT prompt template + source tracking
-            String prompt = String.format("""
-                %s
-                
-                Context information is below, surrounded by ---------------------
-                
-                ---------------------
-                %s
-                ---------------------
-                
-                Given the context and provided history information and not prior knowledge,
-                reply to the user comment. If the answer is not in the context, inform
-                the user that you can't answer the question.
-                
-                At the end of your response, add "SOURCES_USED:" followed by the filenames you actually used from these documents: %s
-                """,
-                    question.getQuestion(),
+            // KEY CHANGE: Use system message for document context
+            String systemMessage = String.format("""
+    You are a helpful AI assistant that answers questions based on the provided document context AND conversation history.
+
+    IMPORTANT: You can use information from EITHER:
+    1. The document context below
+    2. The conversation history (previous messages in this chat)
+    
+    Context information is below, surrounded by ---------------------
+    
+    ---------------------
+    %s
+    ---------------------
+    
+    INSTRUCTIONS:
+    - If the answer is in the conversation history, use that information
+    - If the answer is in the document context, use that information  
+    - If the answer is in neither, then say you can't answer
+    - At the end of your response, add "SOURCES_USED:" followed by the filenames you actually used from these documents: %s
+    """,
                     contextBuilder.toString(),
                     documents.stream()
                             .map(doc -> doc.getMetadata().getOrDefault("filename", "unknown").toString())
@@ -110,13 +116,15 @@ public class ChatControllerOpenAI {
                             .reduce((a, b) -> a + ", " + b)
                             .orElse("none"));
 
-            // Single API call
+            // Send clean user question + system context
             String response = chatClient.prompt()
-                    .user(prompt)
+                    .system(systemMessage)  // Document context goes in system message
+                    .user(question.getQuestion())  // Only clean question in user message
+                    .advisors(advisorSpec -> advisorSpec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
                     .call()
                     .content();
 
-            LOG.info("🔵 OpenAI - Generated response with Spring AI prompt");
+            LOG.info("🔵 OpenAI - Generated response with system message approach");
             return new Answer(response);
 
         } catch (Exception e) {
