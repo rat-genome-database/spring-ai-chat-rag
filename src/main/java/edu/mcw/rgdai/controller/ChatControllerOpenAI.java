@@ -87,7 +87,7 @@ public class ChatControllerOpenAI {
             for (Document doc : documents) {
                 contextBuilder.append(doc.getContent()).append("\n\n");
             }
-            
+
             String systemMessage = String.format("""
     You are a helpful AI assistant that answers questions based on the provided document context AND conversation history.
 
@@ -104,7 +104,7 @@ public class ChatControllerOpenAI {
     INSTRUCTIONS:
     - If the answer is in the conversation history, use that information
     - If the answer is in the document context, use that information  
-    - If the answer is in neither, then say you can't answer
+    - If the answer is neither in conversation history nor document context, then say you can't answer
     - At the end of your response, add "SOURCES_USED:" followed by the filenames you actually used from these documents: %s
     """,
                     contextBuilder.toString(),
