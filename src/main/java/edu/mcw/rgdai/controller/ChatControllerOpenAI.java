@@ -88,26 +88,20 @@ public class ChatControllerOpenAI {
                 contextBuilder.append(doc.getContent()).append("\n\n");
             }
 
-            // KEY CHANGE: Use system message for document context
             String systemMessage = String.format("""
-    You are a helpful AI assistant that answers questions based on the provided document context AND conversation history.
+Answer using the context below OR conversation history. Do NOT use external knowledge about general topics, mountains, etc.
 
-    IMPORTANT: You can use information from EITHER:
-    1. The document context below
-    2. The conversation history (previous messages in this chat)
-    
-    Context information is below, surrounded by ---------------------
-    
-    ---------------------
-    %s
-    ---------------------
-    
-    INSTRUCTIONS:
-    - If the answer is in the conversation history, use that information
-    - If the answer is in the document context, use that information  
-    - If the answer is in neither, then say you can't answer
-    - At the end of your response, add "SOURCES_USED:" followed by the filenames you actually used from these documents: %s
-    """,
+When asked about "last question" or "previous question", refer to the most recent user message in the conversation.
+
+IMPORTANT: When asked about "last question" or "previous question", only refer to questions YOU were asked in THIS conversation, not questions mentioned in the document context.
+
+Context:
+---------------------
+%s
+---------------------
+
+Add "SOURCES_USED: %s" when using context.
+""",
                     contextBuilder.toString(),
                     documents.stream()
                             .map(doc -> doc.getMetadata().getOrDefault("filename", "unknown").toString())
