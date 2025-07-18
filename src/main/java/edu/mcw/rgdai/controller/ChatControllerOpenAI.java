@@ -49,7 +49,6 @@ public class ChatControllerOpenAI {
             throw new RuntimeException("❌ OpenAI ChatModel not found!");
         }
 
-        // Your exact setup - keep MessageChatMemoryAdvisor
         this.chatClient = ChatClient.builder(openAiChatModel)
                 .defaultAdvisors(
                         new SimpleLoggerAdvisor(),
@@ -83,13 +82,12 @@ public class ChatControllerOpenAI {
                 return new Answer("I don't have information about that topic in my knowledge base.");
             }
 
-            // Build context (same as before)
+            // Build doc context
             StringBuilder contextBuilder = new StringBuilder();
             for (Document doc : documents) {
                 contextBuilder.append(doc.getContent()).append("\n\n");
             }
-
-            // KEY CHANGE: Use system message for document context
+            
             String systemMessage = String.format("""
     You are a helpful AI assistant that answers questions based on the provided document context AND conversation history.
 
