@@ -77,6 +77,39 @@ const submitTypedText = (event) => {
     return false;
 };
 
+const startOverChat = () => {
+    if (confirm("Are you sure you want to start over? This will clear the AI's memory of our conversation.")) {
+        // Disable button during request
+        const startOverBtn = document.getElementById("startOverBtn");
+        startOverBtn.disabled = true;
+        startOverBtn.textContent = "Starting over...";
+
+        fetch(contextPath + "/chat-openai/reset-memory", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            }
+        })
+            .then(res => res.json())
+            .then(data => {
+                if (data.status === "success") {
+                    addToTranscript("System", "Chat memory cleared - starting fresh conversation");
+                } else {
+                    addToTranscript("System", "Error: " + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                addToTranscript("System", "Error clearing chat memory");
+            })
+            .finally(() => {
+                // Re-enable button
+                startOverBtn.disabled = false;
+                startOverBtn.textContent = "Start over";
+            });
+    }
+};
+
 // Initialize UI Events
 const initUIEvents = () => {
     // Submit button click
@@ -96,27 +129,31 @@ const initUIEvents = () => {
     const modal = document.getElementById("uploadModal");
     const openModalBtn = document.getElementById("uploadFile");
     const closeModalSpan = document.getElementsByClassName("closeModalSpan")[0];
-
-    openModalBtn.addEventListener('click', () => {
-        modal.style.display = "block";
-    });
-
-    closeModalSpan.addEventListener('click', () => {
-        modal.style.display = "none";
-    });
+    if (openModalBtn) {
+        openModalBtn.addEventListener('click', () => {
+            modal.style.display = "block";
+        });
+    }
+    if (closeModalSpan) {
+        closeModalSpan.addEventListener('click', () => {
+            modal.style.display = "none";
+        });
+    }
 
     // URL modal
     const urlModal = document.getElementById("urlModal");
     const openUrlModalBtn = document.getElementById("processUrl");
     const closeUrlModalSpan = document.getElementsByClassName("closeUrlModalSpan")[0];
-
-    openUrlModalBtn.addEventListener('click', () => {
-        urlModal.style.display = "block";
-    });
-
-    closeUrlModalSpan.addEventListener('click', () => {
-        urlModal.style.display = "none";
-    });
+    if (openUrlModalBtn) {
+        openUrlModalBtn.addEventListener('click', () => {
+            urlModal.style.display = "block";
+        });
+    }
+    if (closeUrlModalSpan) {
+        closeUrlModalSpan.addEventListener('click', () => {
+            urlModal.style.display = "none";
+        });
+    }
 
     // URL form submission
     const urlForm = document.getElementById("urlForm");
@@ -170,6 +207,9 @@ const initUIEvents = () => {
 
     // Welcome message
     addToTranscript("System", "Welcome to OpenAI Chat! Upload documents and ask questions about them.");
+
+    const startOverBtn = document.getElementById('startOverBtn');
+    startOverBtn.addEventListener('click',startOverChat);
 };
 
 // Initialize everything when DOM is loaded

@@ -43,6 +43,39 @@
         .model-switch a:hover {
             background: #218838;
         }
+        /* Start Over Button Styles */
+        .start-over-section {
+            padding: 10px 20px;
+            display: flex;
+            justify-content: flex-end;
+            border-top: 1px solid #eee;
+        }
+
+        .start-over-btn {
+            background-color: transparent;
+            color: #28a745;
+            padding: 8px 16px;
+            border: 1px solid #28a745;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .start-over-btn:hover {
+            background-color: #28a745;
+            color: white;
+        }
+
+        .start-over-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .start-over-btn:disabled:hover {
+            background-color: transparent;
+            color: #28a745;
+        }
     </style>
     <script>
         var username = "<%= username %>";
@@ -100,7 +133,10 @@
         </div>
 
         <div id="transcript"></div>
-        <%if(request.getServerName().equals("localhost") ){%>
+        <div class="start-over-section">
+            <button id="startOverBtn" class="start-over-btn">Start over</button>
+        </div>
+        <%if(!(request.getServerName().equals("localhost") )){%>
         <div id="controls">
             <button id="uploadFile" class="upload-btn">Upload File</button>
             <button id="processUrl" class="upload-btn">Process URL</button>
