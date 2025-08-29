@@ -99,29 +99,6 @@ public class OllamaService {
             }
         }
     }
-
-    // Health check method
-    public boolean isOllamaHealthy() {
-        try {
-            String url = baseUrl + "/api/tags";
-            restTemplate.getForObject(url, Map.class);
-            return true;
-        } catch (Exception e) {
-            LOG.warn("Ollama health check failed: {}", e.getMessage());
-            return false;
-        }
-    }
-
-    // Get available models
-    public Map<String, Object> getAvailableModels() {
-        try {
-            String url = baseUrl + "/api/tags";
-            return restTemplate.getForObject(url, Map.class);
-        } catch (Exception e) {
-            LOG.error("Failed to get available models", e);
-            return Map.of("error", e.getMessage());
-        }
-    }
 }
 
 //old code

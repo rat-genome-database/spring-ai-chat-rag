@@ -2,198 +2,192 @@ package edu.mcw.rgdai.controller;
 
 import edu.mcw.rgdai.model.Answer;
 import edu.mcw.rgdai.model.Question;
-import edu.mcw.rgdai.service.OllamaService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.document.Document;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
+import org.springframework.ai.chat.memory.InMemoryChatMemory;
+import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationContext;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-
+import org.springframework.ai.document.Document;
+import org.springframework.http.ResponseEntity;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.HashMap;
 
 @RestController
 @RequestMapping("/chat")
 public class ChatController {
-    private static final Logger LOG = LoggerFactory.getLogger(ChatController.class);
-    private final VectorStore vectorStore;
-    private final OllamaService ollamaService;
 
-    public ChatController(VectorStore vectorStore, OllamaService ollamaService) {
+    private static final Logger LOG = LoggerFactory.getLogger(ChatController.class);
+
+    private ChatClient chatClient;
+    private final VectorStore vectorStore;
+    private final String configuredModel;
+    private InMemoryChatMemory chatMemory;
+    private final ChatModel ollamaChatModel;
+    private static final String CHAT_MEMORY_CONVERSATION_ID_KEY = "conversationId";
+
+    public ChatController(
+            ApplicationContext context,
+            @Qualifier("ollamaVectorStore") VectorStore vectorStore,
+            @Value("${spring.ai.ollama.chat.model}") String configuredModel) {
+
+        LOG.info("🤖 Initializing Ollama ChatController with enhanced features");
         this.vectorStore = vectorStore;
-        this.ollamaService = ollamaService;
-        LOG.info("ChatController initialized successfully");
+        this.configuredModel = configuredModel;
+        this.chatMemory = new InMemoryChatMemory();
+
+        LOG.info("🎯 Configured Ollama Model: {}", configuredModel);
+
+        // Find Ollama ChatModel
+        Map<String, ChatModel> chatModels = context.getBeansOfType(ChatModel.class);
+        ChatModel foundModel = null;
+        for (Map.Entry<String, ChatModel> entry : chatModels.entrySet()) {
+            if (entry.getValue().getClass().getSimpleName().toLowerCase().contains("ollama")) {
+                foundModel = entry.getValue();
+                LOG.info("✅ Found Ollama ChatModel: {}", entry.getKey());
+                LOG.info("📋 ChatModel Class: {}", entry.getValue().getClass().getName());
+                break;
+            }
+        }
+        if (foundModel == null) {
+            throw new RuntimeException("❌ Ollama ChatModel not found!");
+        }
+        this.ollamaChatModel = foundModel;
+        this.chatClient = buildClient(ollamaChatModel, this.chatMemory);
+        LOG.info("✅ Ollama ChatClient initialized successfully with model: {}", configuredModel);
+    }
+
+    private ChatClient buildClient(ChatModel model, InMemoryChatMemory memory) {
+        return ChatClient.builder(model)
+                .defaultAdvisors(
+                        new SimpleLoggerAdvisor(),
+                        new MessageChatMemoryAdvisor(memory)
+                )
+                .build();
     }
 
     @PostMapping
-    public Answer chat(@RequestBody Question question, Authentication user) {
-        LOG.info("Received question: {}", question.getQuestion());
+    public Answer chat(@RequestBody Question question,
+                       Authentication user,
+                       HttpServletRequest request) {
 
-        // Handle simple greetings without context
+        LOG.info("🟠 Ollama - Received question: {}", question.getQuestion());
+        LOG.info("🎯 Processing with model: {}", configuredModel);
+
+        String conversationId = getOrCreateConversationId(user, request);
+        LOG.info("🟠 Using conversation ID: {}", conversationId);
+
         if (isGreeting(question.getQuestion())) {
-            return new Answer("Hello! I'm here to help you with questions about the documents in my knowledge base. What would you like to know?");
+            return new Answer("Hello! I'm the Ollama version. I can help you with questions about the documents in my knowledge base. What would you like to know?");
         }
 
-        // 1. Retrieve relevant documents
-        List<Document> documents = vectorStore.similaritySearch(
-                SearchRequest.query(question.getQuestion())
-                        .withTopK(8)// Get more documents for better context
-                        .withSimilarityThreshold(0.38)
+        try {
+            List<Document> documents = vectorStore.similaritySearch(
+                    SearchRequest.query(question.getQuestion())
+                            .withTopK(8)
+                            .withSimilarityThreshold(0.38));
+            LOG.info("🟠 Ollama - Retrieved {} documents from vector store", documents.size());
 
-        );
+            if (documents.isEmpty()) {
+                return new Answer("I don't have information about that topic in my knowledge base.");
+            }
 
-        LOG.info("Retrieved {} documents from vector store", documents.size());
+            StringBuilder contextBuilder = new StringBuilder();
+            for (Document doc : documents) {
+                String filename = doc.getMetadata().getOrDefault("filename", "unknown").toString();
+                contextBuilder.append(String.format("--- FROM: %s ---\n%s\n\n", filename, doc.getContent()));
+            }
 
-        // 2. Check if we have relevant context AND if it's actually related to the question
-        if (documents.isEmpty()) {
-            return new Answer("I don't have information about that topic in my knowledge base. Please try rephrasing your question or check if relevant documents have been uploaded.");
+            String systemMessage = String.format("""
+                                                Answer using the context below OR conversation history. Do NOT use external knowledge about general topics, mountains, etc.
+                                                When asked about "last question" or "previous question", refer to the most recent user message in the conversation.
+                                                IMPORTANT: When asked about "last question" or "previous question", only refer to questions YOU were asked in THIS conversation, not questions mentioned in the document context.
+
+                                                Context:
+                                                ---------------------
+                                                %s
+                                                ---------------------
+                                                When you use information from the context above, add "SOURCES_USED:[]" followed by the specific filenames that contained the information you referenced in your response. Only list sources you actually drew information from.
+                                                ""\", contextBuilder);
+                    """, contextBuilder.toString());
+
+            String response = chatClient.prompt()
+                    .system(systemMessage)
+                    .user(question.getQuestion())
+                    .advisors(spec -> spec.param(CHAT_MEMORY_CONVERSATION_ID_KEY, conversationId))
+                    .call()
+                    .content();
+
+            LOG.info("🟠 Ollama - Generated response using model: {}", configuredModel);
+            return new Answer(response);
+
+        } catch (Exception e) {
+            LOG.error("❌ Ollama - Error generating response with model {}: {}", configuredModel, e.getMessage(), e);
+            return new Answer("Ollama Error: " + e.getMessage());
         }
+    }
 
-        // 3. Quick relevance check - if the question seems completely unrelated to document content
-        if (isGeneralKnowledgeQuestion(question.getQuestion(), documents)) {
-            return new Answer("I don't have information about that in my knowledge base. Please ask questions related to the uploaded documents.");
+    @PostMapping("/reset-memory")
+    public ResponseEntity<Map<String, String>> resetChatMemory(
+            Authentication user,
+            HttpServletRequest request) {
+
+        LOG.info("🔄 Ollama - Reset chat memory requested");
+        try {
+            String oldId = getOrCreateConversationId(user, request);
+            chatMemory.clear(oldId);
+            LOG.info("✅ Ollama - Cleared memory for conversation ID: {}", oldId);
+
+            request.getSession().removeAttribute("ollama_conversation_id");
+
+            String newId = "reset_" + System.currentTimeMillis();
+            request.getSession().setAttribute("ollama_conversation_id", newId);
+            LOG.info("✅ Ollama - Started new conversation with ID: {}", newId);
+
+            InMemoryChatMemory newMemory = new InMemoryChatMemory();
+            this.chatMemory = newMemory;
+            this.chatClient = buildClient(this.ollamaChatModel, newMemory);
+
+            Map<String, String> resp = new HashMap<>();
+            resp.put("status", "success");
+            resp.put("message", "Chat memory cleared successfully");
+            resp.put("oldConversationId", oldId);
+            resp.put("newConversationId", newId);
+            return ResponseEntity.ok(resp);
+
+        } catch (Exception e) {
+            LOG.error("❌ Ollama - Error resetting chat memory: {}", e.getMessage(), e);
+            Map<String, String> resp = new HashMap<>();
+            resp.put("status", "error");
+            resp.put("message", "Failed to reset chat memory");
+            return ResponseEntity.status(500).body(resp);
         }
-
-        // 3. Format the context with source information
-        StringBuilder contextBuilder = new StringBuilder();
-        for (int i = 0; i < documents.size(); i++) {
-            Document doc = documents.get(i);
-            String filename = doc.getMetadata().getOrDefault("filename", "unknown").toString();
-//            contextBuilder.append(String.format("Source %d (from %s):\n%s\n\n",
-//                    i + 1, filename, doc.getContent()));
-            contextBuilder.append(String.format("From %s:\n%s\n\n",
-                    filename, doc.getContent()));
-//            String cleanFilename = filename.replace(".pdf", "").replace(".md", "").replace("-", " ");
-//            contextBuilder.append(String.format("From %s:\n%s\n\n", cleanFilename, doc.getContent()));
-        }
-
-        String context = contextBuilder.toString();
-        LOG.info("Context length: {} characters from {} sources", context.length(), documents.size());
-
-        // 4. Create an improved prompt
-        String prompt = createImprovedPrompt(context, question.getQuestion());
-
-        // 5. Get response from Ollama
-        String response = ollamaService.generateResponse(prompt);
-
-        // 6. Post-process the response
-        String finalResponse = postProcessResponse(response, documents);
-
-        return new Answer(finalResponse);
     }
 
     private boolean isGreeting(String text) {
-        String lowerText = text.toLowerCase().trim();
-        return lowerText.matches("^(hi|hello|hey|good morning|good afternoon|good evening|how are you|what's up|greetings).*");
-    }
-
-    private boolean isGeneralKnowledgeQuestion(String question, List<Document> documents) {
-        String lowerQuestion = question.toLowerCase();
-
-        // Common patterns for general knowledge questions
-        String[] generalPatterns = {
-                "how tall is", "how high is", "what is the height of",
-                "when was.*born", "when did.*die", "who invented",
-                "what is the capital of", "what is the population of",
-                "how far is", "what time is it", "what's the weather",
-                "who is the president", "who is the ceo of.*(?!.*" + getDocumentTopics(documents) + ")",
-                "what year did", "how old is", "what color is",
-                "recipe for", "how to cook", "lyrics to"
-        };
-
-        for (String pattern : generalPatterns) {
-            if (lowerQuestion.matches(".*" + pattern + ".*")) {
-                // Double-check: if the documents actually contain related content, allow it
-                if (documentsContainRelevantTerms(question, documents)) {
-                    return false; // Not a general knowledge question if our docs have related content
-                }
-                LOG.info("Detected general knowledge question: {}", question);
-                return true;
-            }
+        if (text == null || text.trim().isEmpty()) {
+            return false;
         }
-
-        return false;
+        return text.toLowerCase().matches(".*\\b(hi|hello|hey|greetings)\\b.*");
     }
 
-    private String getDocumentTopics(List<Document> documents) {
-        // Extract key terms from documents to help identify if question might be relevant
-        return documents.stream()
-                .map(doc -> doc.getMetadata().getOrDefault("filename", "").toString())
-                .collect(Collectors.joining("|"));
-    }
-
-    private boolean documentsContainRelevantTerms(String question, List<Document> documents) {
-        String[] questionWords = question.toLowerCase().split("\\s+");
-
-        // Check if any significant words from the question appear in the documents
-        for (Document doc : documents) {
-            String content = doc.getContent().toLowerCase();
-            long matchingWords = 0;
-
-            for (String word : questionWords) {
-                if (word.length() > 3 && content.contains(word)) { // Only check significant words
-                    matchingWords++;
-                }
-            }
-
-            // If more than 20% of significant words match, consider it potentially relevant
-            if (matchingWords > questionWords.length * 0.2) {
-                return true;
-            }
+    private String getOrCreateConversationId(Authentication user, HttpServletRequest request) {
+        String conversationId = (String) request.getSession().getAttribute("ollama_conversation_id");
+        if (conversationId == null) {
+            conversationId = (user != null) ? user.getName() : request.getSession().getId();
+            request.getSession().setAttribute("ollama_conversation_id", conversationId);
         }
-
-        return false;
-    }
-
-    private String createImprovedPrompt(String context, String question) {
-        return String.format("""
-            You are a helpful AI assistant that ONLY answers questions based on the provided document context. You must not use any external knowledge or general information.
-
-            **CRITICAL INSTRUCTIONS:**
-            1. **ONLY use the provided context**: Answer ONLY based on information explicitly found in the context below
-            2. **No external knowledge**: Do NOT answer questions about general topics, current events, or information not in the context
-            3. **Be strict**: If the answer is not in the context, you MUST say "I don't have information about that in my knowledge base"
-            4. **Cite sources**: When you do find relevant information, mention which document it came from
-            5. **Be helpful when context exists**: If the context contains relevant information, provide a detailed answer
-
-            **RESPONSE RULES:**
-            - If the context contains relevant information: Provide a comprehensive, detailed response with source citations
-            - If the context partially answers the question: Answer only what the context supports and indicate what's missing
-            - If the context is not relevant or doesn't contain the answer: Respond with "I don't have information about that in my knowledge base. Please ask questions related to the uploaded documents."
-
-            **EXAMPLES OF WHAT NOT TO ANSWER:**
-            - General knowledge questions (height of mountains, historical dates not in documents, etc.)
-            - Current events not mentioned in the documents
-            - Mathematical calculations not related to document content
-            - Personal advice or opinions
-
-            **CONTEXT FROM DOCUMENTS:**
-            %s
-
-            **USER QUESTION:** %s
-
-            **YOUR RESPONSE:**
-            """, context, question);
-    }
-
-    private String postProcessResponse(String response, List<Document> sources) {
-        // If response seems incomplete, add helpful information about sources
-        if (response.toLowerCase().contains("don't contain") ||
-                response.toLowerCase().contains("not available") ||
-                response.toLowerCase().contains("don't have")) {
-
-            StringBuilder sourceInfo = new StringBuilder("\n\nAvailable documents in knowledge base:\n");
-            sources.stream()
-                    .map(doc -> doc.getMetadata().getOrDefault("filename", "unknown").toString())
-                    .distinct()
-                    .forEach(filename -> sourceInfo.append("• ").append(filename).append("\n"));
-
-            return response + sourceInfo.toString();
-        }
-
-        return response;
+        return conversationId;
     }
 }
 
