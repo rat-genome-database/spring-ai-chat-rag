@@ -27,6 +27,7 @@ ext {
 }
 
 dependencies {
+    implementation fileTree(dir: 'lib', include: '*.jar')
     // Spring Boot Starters
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-security'

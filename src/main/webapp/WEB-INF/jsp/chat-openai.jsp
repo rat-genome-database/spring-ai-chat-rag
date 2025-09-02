@@ -136,12 +136,12 @@
         <div class="start-over-section">
             <button id="startOverBtn" class="start-over-btn">Start over</button>
         </div>
-        <%if(!(request.getServerName().equals("localhost") )){%>
+<%--        <%if((request.getServerName().equals("localhost") )){%>--%>
         <div id="controls">
             <button id="uploadFile" class="upload-btn">Upload File</button>
             <button id="processUrl" class="upload-btn">Process URL</button>
         </div>
-        <%}%>
+<%--        <%}%>--%>
         <div class="input-area">
             <textarea id="userInput" placeholder="Ask OpenAI a question about your documents..." rows="3"></textarea>
             <button id="typedTextSubmit" class="submit-btn">Send</button>
