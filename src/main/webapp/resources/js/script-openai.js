@@ -14,7 +14,20 @@ const createTranscriptEntry = (who, name, text) => {
 };
 
 const handleResponse = (response) => {
-    addToTranscript("AI", response.answer);
+    // Convert NCT IDs to links before adding to transcript
+    const enhancedAnswer = convertNCTToLinks(response.answer);
+    addToTranscript("AI", enhancedAnswer);
+    // addToTranscript("AI", response.answer);
+};
+// Function to convert NCT IDs to clickable links
+const convertNCTToLinks = (text) => {
+    // Pattern to match NCT IDs (NCT followed by 8 digits)
+    const nctPattern = /\b(NCT\d{8})\b/g;
+
+    return text.replace(nctPattern, (match, nctId) => {
+        const url = `https://scge.mcw.edu/platform/data/clinicalTrials/report/${nctId}`;
+        return `<a href="${url}" target="_blank">${nctId}</a>`;
+    });
 };
 
 // API Interactions - OpenAI Endpoints
@@ -204,6 +217,49 @@ const initUIEvents = () => {
             console.error('Error processing upload response:', e);
         }
     });
+    // Load Clinical Trials button
+    const loadTrialsBtn = document.getElementById("loadTrials");
+    if (loadTrialsBtn) {
+        loadTrialsBtn.addEventListener('click', () => {
+                loadTrialsBtn.disabled = true;
+                loadTrialsBtn.textContent = "Loading Trials...";
+
+                addToTranscript("System", "Starting clinical trials loading process...");
+
+                fetch(contextPath + "/load-clinical-trials", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.error) {
+                            addToTranscript("System", `Error: ${data.error}`);
+                        } else {
+                            const message = `Clinical trials loading complete!\n` +
+                                `Total: ${data.total}\n` +
+                                `Processed: ${data.processed}\n` +
+                                `Overwritten: ${data.overwritten}\n` +
+                                `Failed: ${data.failed}`;
+
+                            addToTranscript("System", message);
+
+                            if (data.failedList && data.failedList.length > 0) {
+                                addToTranscript("System", `Failed trials: ${data.failedList.join(', ')}`);
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading clinical trials:', error);
+                        addToTranscript("System", "Error loading clinical trials: " + error.message);
+                    })
+                    .finally(() => {
+                        loadTrialsBtn.disabled = false;
+                        loadTrialsBtn.textContent = "Load Clinical Trials";
+                    });
+        });
+    }
 
     // Welcome message
     addToTranscript("System", "Welcome to OpenAI Chat! Upload documents and ask questions about them.");

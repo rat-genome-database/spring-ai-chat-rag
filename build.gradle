@@ -48,7 +48,7 @@ dependencies {
     implementation 'org.springframework.ai:spring-ai-core:1.0.0-M4'
 
     //for postgres
-    implementation 'org.postgresql:postgresql'
+    implementation("org.postgresql:postgresql:42.7.7")
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation group: 'com.pgvector', name: 'pgvector', version: '0.1.3'
     //for HTML parsing
